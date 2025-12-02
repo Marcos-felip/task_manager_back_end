@@ -50,7 +50,6 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         return f"{obj.first_name} {obj.last_name}".strip() or obj.email
 
     def validate(self, attrs):
-        # Validação apenas na criação (quando tem password)
         if self.instance is None and 'password' in attrs:
             if not attrs.get('password_confirm'):
                 raise serializers.ValidationError("Confirmação de senha é obrigatória.")
@@ -58,7 +57,6 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
             if attrs['password'] != attrs['password_confirm']:
                 raise serializers.ValidationError("As senhas não coincidem.")
             
-            # Validar senha usando validadores do Django
             try:
                 validate_password(attrs['password'])
             except ValidationError as e:
@@ -67,26 +65,22 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_email(self, value):
-        # Apenas validar unicidade na criação ou se o email mudou
         if self.instance is None or (self.instance and self.instance.email != value):
             if User.objects.filter(email=value).exists():
                 raise serializers.ValidationError("Um usuário com este email já existe.")
         return value
 
     def create(self, validated_data):
-        # Remover campos que não pertencem ao modelo User
         role = validated_data.pop('role', Membership.Roles.MEMBER)
         is_member_active = validated_data.pop('is_member_active', True)
         password_confirm = validated_data.pop('password_confirm', None)
         password = validated_data.pop('password')
         
-        # Criar o usuário
         user = User.objects.create_user(
             password=password,
             **validated_data
         )
         
-        # Criar o membership na organização
         organization = self.context.get('organization')
         if organization:
             membership = Membership.objects.create(
@@ -96,10 +90,8 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
                 is_active=is_member_active
             )
             
-            # Adicionar dados do membership para o retorno
             user.membership_created = membership.created
             
-            # Se é o primeiro membro da organização, definir como org_active
             if not user.org_active:
                 user.org_active = organization
                 user.save()
@@ -107,20 +99,16 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
-        # Separar dados do User e do Membership
         role = validated_data.pop('role', None)
         is_member_active = validated_data.pop('is_member_active', None)
         
-        # Remover campos de password se enviados por engano na atualização
         validated_data.pop('password', None)
         validated_data.pop('password_confirm', None)
         
-        # Atualizar dados do User
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
-        # Atualizar dados do Membership se necessário
         organization = self.context.get('organization')
         if organization and (role is not None or is_member_active is not None):
             try:
@@ -136,10 +124,8 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         return instance
 
     def to_representation(self, instance):
-        """Adicionar dados do membership na representação"""
         data = super().to_representation(instance)
         
-        # Buscar dados do membership para esta organização
         organization = self.context.get('organization')
         if organization:
             try:
