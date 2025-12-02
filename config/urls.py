@@ -27,6 +27,7 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/api/v1/swagger-ui/', permanent=False)),
     path('admin/', admin.site.urls),
     path('api/v1/', include('auth.urls')),
+    path('api/v1/accounts/', include('accounts.urls')),
     path('api/v1/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/v1/', SpectacularAPIView.as_view(), name='schema'),
