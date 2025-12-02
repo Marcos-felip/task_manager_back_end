@@ -50,7 +50,7 @@ class RegisterView(APIView):
                         'type': 'string',
                         'example': 'Usuário registrado com sucesso'
                     },
-                    'user_key': {
+                    'user_id': {
                         'type': 'string',
                         'description': 'Chave única do usuário para criação de organização',
                         'example': 'ABC123DEF456'
@@ -77,7 +77,7 @@ class RegisterView(APIView):
             return Response(
                 {
                     "message": "Usuário registrado com sucesso",
-                    "user_key": str(user.user_id)
+                    "user_id": str(user.user_id)
                 }, 
                 status=status.HTTP_201_CREATED
             )
@@ -108,7 +108,7 @@ class CreateOrganizationView(APIView):
                     'name': 'Minha Empresa Ltda',
                     'email': 'contato@minhaempresa.com',
                     'organization_id': '12.345.678/0001-90',
-                    'user_key': 'ABC123DEF456'
+                    'user_id': 'ABC123DEF456'
                 }
             )
         ]
