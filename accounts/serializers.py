@@ -15,48 +15,31 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         default=Membership.Roles.MEMBER,
         required=False
     )
-    is_member_active = serializers.BooleanField(required=False, default=True)
-    membership_created = serializers.DateTimeField(read_only=True)
     
-    password = serializers.CharField(write_only=True, required=False)
-    password_confirm = serializers.CharField(write_only=True, required=False)
+    password = serializers.CharField(write_only=True, required=True)
     
-    full_name = serializers.SerializerMethodField()
+    full_name = serializers.CharField(write_only=True, required=True)
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
+    status = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
         fields = [
-            'id',
             'email',
             'first_name',
             'last_name',
             'full_name',
-            'is_active',
-            'created',
             'role',
-            'is_member_active', 
-            'membership_created',
-            'password',
-            'password_confirm'
+            'status',
+            'password'
         ]
-        read_only_fields = ['id', 'created', 'membership_created']
         extra_kwargs = {
             'email': {'required': True},
-            'first_name': {'required': True},
-            'last_name': {'required': True},
         }
-
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}".strip() or obj.email
 
     def validate(self, attrs):
         if self.instance is None and 'password' in attrs:
-            if not attrs.get('password_confirm'):
-                raise serializers.ValidationError("Confirmação de senha é obrigatória.")
-            
-            if attrs['password'] != attrs['password_confirm']:
-                raise serializers.ValidationError("As senhas não coincidem.")
-            
             try:
                 validate_password(attrs['password'])
             except ValidationError as e:
@@ -72,51 +55,53 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         role = validated_data.pop('role', Membership.Roles.MEMBER)
-        is_member_active = validated_data.pop('is_member_active', True)
-        password_confirm = validated_data.pop('password_confirm', None)
         password = validated_data.pop('password')
+        full_name = validated_data.pop('full_name')
+        
+        name_parts = full_name.split(' ', 1)
+        first_name = name_parts[0]
+        last_name = name_parts[1] if len(name_parts) > 1 else ''
+        
+        organization = self.context.get('organization')
+        if not organization:
+            raise serializers.ValidationError("Organização não encontrada no contexto.")
         
         user = User.objects.create_user(
+            username=validated_data['email'],
             password=password,
+            first_name=first_name,
+            last_name=last_name,
             **validated_data
         )
         
-        organization = self.context.get('organization')
-        if organization:
-            membership = Membership.objects.create(
-                user=user,
-                organization=organization,
-                role=role,
-                is_active=is_member_active
-            )
-            
-            user.membership_created = membership.created
-            
-            if not user.org_active:
-                user.org_active = organization
-                user.save()
+        membership = Membership.objects.create(
+            user=user,
+            organization=organization,
+            role=role,
+            is_active=True
+        )
+        
+        if not user.org_active:
+            user.org_active = organization
+            user.save()
         
         return user
 
     def update(self, instance, validated_data):
         role = validated_data.pop('role', None)
-        is_member_active = validated_data.pop('is_member_active', None)
         
         validated_data.pop('password', None)
-        validated_data.pop('password_confirm', None)
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
         organization = self.context.get('organization')
-        if organization and (role is not None or is_member_active is not None):
+        
+        if organization and role is not None:
             try:
                 membership = Membership.objects.get(user=instance, organization=organization)
-                if role is not None:
-                    membership.role = role
-                if is_member_active is not None:
-                    membership.is_active = is_member_active
+                membership.role = role
                 membership.save()
             except Membership.DoesNotExist:
                 pass
@@ -126,16 +111,21 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         
+        data.pop('full_name', None)
+        data.pop('password', None)
+        
         organization = self.context.get('organization')
+        
+        if not organization and hasattr(instance, 'org_active'):
+            organization = instance.org_active
+            
         if organization:
             try:
                 membership = Membership.objects.get(user=instance, organization=organization)
-                data['role'] = membership.role
-                data['is_member_active'] = membership.is_active
-                data['membership_created'] = membership.created
+                data['role'] = membership.get_role_display()
+                data['status'] = membership.is_active
             except Membership.DoesNotExist:
                 data['role'] = None
-                data['is_member_active'] = None
-                data['membership_created'] = None
+                data['status'] = False
         
         return data

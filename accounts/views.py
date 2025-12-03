@@ -1,9 +1,7 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework import viewsets, status, mixins
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
 from django.db.models import Prefetch
 from auth.models import Membership, Organization
 from .serializers import OrganizationMemberSerializer
@@ -11,28 +9,28 @@ from .serializers import OrganizationMemberSerializer
 User = get_user_model()
 
 
-class OrganizationMemberViewSet(viewsets.ModelViewSet):
+class OrganizationMemberViewSet(mixins.ListModelMixin,
+                                mixins.CreateModelMixin,
+                                viewsets.GenericViewSet):
     """
-    ViewSet para gerenciar membros de uma organização.
+    ViewSet para gerenciar membros da organização ativa do usuário.
     
     Endpoints disponíveis:
-    - GET /accounts/members/ - Lista todos os membros da organização ativa
-    - POST /accounts/members/ - Cria um novo membro
-    - GET /accounts/members/{id}/ - Detalhe de um membro
-    - PUT/PATCH /accounts/members/{id}/ - Atualiza um membro
-    - DELETE /accounts/members/{id}/ - Remove um membro da organização
+    - GET /accounts/members/ - Lista membros da organização ativa do usuário
+    - POST /accounts/members/ - Cria um novo membro na organização ativa do usuário
     """
     permission_classes = [IsAuthenticated]
     
     def get_organization(self):
-        """Retorna a organização ativa do usuário logado"""
+        """Retorna a organização ativa do usuário"""
         if not hasattr(self.request.user, 'org_active') or not self.request.user.org_active:
             return None
         return self.request.user.org_active
     
     def get_queryset(self):
-        """Retorna apenas usuários da organização ativa"""
+        """Retorna apenas usuários da organização ativa do usuário"""
         organization = self.get_organization()
+        
         if not organization:
             return User.objects.none()
         
@@ -55,12 +53,25 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         return context
     
     def list(self, request, *args, **kwargs):
-        """Lista todos os membros da organização"""
+        """Lista todos os membros da organização ativa do usuário"""
         organization = self.get_organization()
+        
         if not organization:
             return Response(
                 {'detail': 'Usuário não possui organização ativa'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            membership = Membership.objects.get(
+                user=request.user, 
+                organization=organization,
+                is_active=True
+            )
+        except Membership.DoesNotExist:
+            return Response(
+                {'detail': 'Usuário não é membro da organização'},
+                status=status.HTTP_403_FORBIDDEN
             )
         
         queryset = self.filter_queryset(self.get_queryset())
@@ -74,8 +85,9 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     def create(self, request, *args, **kwargs):
-        """Cria um novo membro na organização"""
+        """Cria um novo membro na organização ativa do usuário"""
         organization = self.get_organization()
+        
         if not organization:
             return Response(
                 {'detail': 'Usuário não possui organização ativa'},
@@ -85,11 +97,12 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
         try:
             membership = Membership.objects.get(
                 user=request.user, 
-                organization=organization
+                organization=organization,
+                is_active=True
             )
             if membership.role not in [Membership.Roles.OWNER, Membership.Roles.MANAGER]:
                 return Response(
-                    {'detail': 'Sem permissão para adicionar membros'},
+                    {'detail': 'Sem permissão para adicionar membros. Apenas OWNER e MANAGER podem adicionar membros.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
         except Membership.DoesNotExist:
@@ -108,109 +121,3 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED, 
             headers=headers
         )
-    
-    def update(self, request, *args, **kwargs):
-        """Atualiza um membro da organização"""
-        organization = self.get_organization()
-        if not organization:
-            return Response(
-                {'detail': 'Usuário não possui organização ativa'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        instance = self.get_object()
-        
-        try:
-            membership = Membership.objects.get(
-                user=request.user, 
-                organization=organization
-            )
-            if membership.role not in [Membership.Roles.OWNER, Membership.Roles.MANAGER]:
-                return Response(
-                    {'detail': 'Sem permissão para atualizar membros'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        except Membership.DoesNotExist:
-            return Response(
-                {'detail': 'Usuário não é membro da organização'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        partial = kwargs.pop('partial', False)
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        
-        return Response(serializer.data)
-    
-    def destroy(self, request, *args, **kwargs):
-        """Remove um membro da organização"""
-        organization = self.get_organization()
-        if not organization:
-            return Response(
-                {'detail': 'Usuário não possui organização ativa'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        instance = self.get_object()
-        
-        try:
-            membership = Membership.objects.get(
-                user=request.user, 
-                organization=organization
-            )
-            if membership.role not in [Membership.Roles.OWNER, Membership.Roles.MANAGER]:
-                return Response(
-                    {'detail': 'Sem permissão para remover membros'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        except Membership.DoesNotExist:
-            return Response(
-                {'detail': 'Usuário não é membro da organização'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        try:
-            target_membership = Membership.objects.get(
-                user=instance, 
-                organization=organization
-            )
-            if target_membership.role == Membership.Roles.OWNER:
-                return Response(
-                    {'detail': 'Não é possível remover o proprietário da organização'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except Membership.DoesNotExist:
-            pass
-        
-        Membership.objects.filter(
-            user=instance, 
-            organization=organization
-        ).delete()
-        
-        return Response(status=status.HTTP_204_NO_CONTENT)
-    
-    @action(detail=False, methods=['get'])
-    def stats(self, request):
-        """Retorna estatísticas dos membros da organização"""
-        organization = self.get_organization()
-        if not organization:
-            return Response(
-                {'detail': 'Usuário não possui organização ativa'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        memberships = Membership.objects.filter(organization=organization)
-        
-        stats = {
-            'total_members': memberships.count(),
-            'active_members': memberships.filter(is_active=True).count(),
-            'inactive_members': memberships.filter(is_active=False).count(),
-            'roles': {
-                'owners': memberships.filter(role=Membership.Roles.OWNER).count(),
-                'managers': memberships.filter(role=Membership.Roles.MANAGER).count(),
-                'members': memberships.filter(role=Membership.Roles.MEMBER).count(),
-            }
-        }
-        
-        return Response(stats)

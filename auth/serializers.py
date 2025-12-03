@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import Organization, Membership
 
 User = get_user_model()
@@ -62,3 +63,20 @@ class OrganizationSerializer(serializers.ModelSerializer):
         user.save()
         
         return organization
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        
+        data['user'] = {
+            'email': self.user.email,
+            'first_name': self.user.first_name,
+            'last_name': self.user.last_name,
+            'org_active': {
+                'name': self.user.org_active.name if self.user.org_active else None,
+                'organization_key': self.user.org_active.key if self.user.org_active else None
+            }
+        }
+        
+        return data

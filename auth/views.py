@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import authenticate
-from .serializers import RegisterSerializer, OrganizationSerializer
+from .serializers import RegisterSerializer, OrganizationSerializer, CustomTokenObtainPairSerializer
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiExample
@@ -131,6 +131,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
         Obtenha o par de tokens JWT.
     """
+    serializer_class = CustomTokenObtainPairSerializer
     @extend_schema(
         request={
             'application/json': {
@@ -165,6 +166,42 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                         'type': 'string',
                         'description': 'Token de acesso JWT',
                         'example': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...'
+                    },
+                    'user': {
+                        'type': 'object',
+                        'properties': {
+                            'email': {
+                                'type': 'string',
+                                'format': 'email',
+                                'description': 'Email do usuário autenticado',
+                                'example': 'joao.silva@email.com'
+                            },
+                            'first_name': {
+                                'type': 'string',
+                                'description': 'Primeiro nome do usuário',
+                                'example': 'João'
+                            },
+                            'last_name': {
+                                'type': 'string',
+                                'description': 'Último nome do usuário',
+                                'example': 'Silva'
+                            },
+                            'org_active': {
+                                'type': 'object',
+                                'properties': {
+                                    'name': {
+                                        'type': 'string',
+                                        'description': 'Nome da organização ativa do usuário',
+                                        'example': 'Minha Empresa Ltda'
+                                    },
+                                    'organization_key': {
+                                        'type': 'string',
+                                        'description': 'Chave única da organização ativa',
+                                        'example': 'ORG123KEY456'
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             },
