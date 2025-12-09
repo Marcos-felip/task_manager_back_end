@@ -12,9 +12,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+sys.path.insert(0, str(BASE_DIR / 'apps'))
 
 
 # Quick-start development settings - unsuitable for production
@@ -43,8 +46,8 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'drf_spectacular',
-    'auth.apps.AuthConfig',
-    'accounts',
+    
+    'apps.accounts',
 ]
 
 MIDDLEWARE = [
@@ -132,7 +135,7 @@ APPEND_SLASH = False
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-AUTH_USER_MODEL = 'custom_auth.User'
+AUTH_USER_MODEL = 'accounts.User'
 
 
 REST_FRAMEWORK = {
@@ -140,6 +143,15 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+DJANGO_API_DOMAINS = {
+    "accounts": {
+        "domain": "accounts.domain",
+        "application": "accounts.application",
+        "infrastructure": "accounts.infrastructure",
+        "presentation": "accounts.presentation",
+    },
 }
 
 SIMPLE_JWT = {

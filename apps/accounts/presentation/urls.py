@@ -1,9 +1,9 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import OrganizationMemberViewSet
+from .views.user_viewset import UserViewSet
 
 router = DefaultRouter()
-router.register(r'members', OrganizationMemberViewSet, basename='organization-members')
+router.register(r'users', UserViewSet, basename='users')
 
 app_name = 'accounts'
 
