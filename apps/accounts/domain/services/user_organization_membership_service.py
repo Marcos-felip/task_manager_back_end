@@ -9,9 +9,12 @@ class UserOrganizationMembershipService:
         self.org_repo = org_repo
         
     def create_user_and_membership(self, user_data, organization_id, membership_data):
-        
-        user = User(**user_data)
-        user = self.user_repo.create_user(user)
+        user = None
+        if user_data and user_data.get('user_id'):
+            user = self.user_repo.get_user_by_id(int(user_data['user_id']))
+        if not user:
+            user = User(**{k: v for k, v in user_data.items() if k != 'user_id'})
+            user = self.user_repo.create_user(user)
         
         organization = self.org_repo.get_organization_by_id(organization_id)
         

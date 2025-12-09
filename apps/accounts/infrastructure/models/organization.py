@@ -13,3 +13,6 @@ class Organization(models.Model):
     name = models.CharField(max_length=50, verbose_name=u'nome da organização')
     email = models.EmailField(verbose_name=u'E-mail', null=True, blank=True)
     cpf_cnpj = models.CharField(max_length=50, verbose_name=u'CNPJ/CPF')
+    
+    def __str__(self):
+        return self.name

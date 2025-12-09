@@ -19,6 +19,12 @@ class User(AbstractUser):
     
     class Meta:
         app_label = 'accounts'
+
+    @property
+    def full_name(self) -> str:
+        first = self.first_name or ""
+        last = self.last_name or ""
+        return (first + " " + last).strip()
     
     
 class Membership(models.Model):
@@ -38,3 +44,6 @@ class Membership(models.Model):
     
     class Meta:
         app_label = 'accounts'
+        
+    def __str__(self):
+        return self.user.full_name
