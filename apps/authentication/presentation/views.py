@@ -2,18 +2,8 @@ from rest_framework import status, views, permissions
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
 
-from accounts.infrastructure.models.user import User
-from accounts.infrastructure.models.organization import Organization
-from apps.accounts.application.use_cases.create_user_with_organization_and_membership import (
-    CreateUserWithOrganizationAndMembershipUseCase,
-)
-from accounts.infrastructure.repositories.user_repo_django import UserRepositoryDjango
-from accounts.infrastructure.repositories.organization_repo_django import OrganizationRepositoryDjango
-from apps.authentication.presentation.serializers import (
-    RegisterSerializer,
-    CreateOrgMembershipSerializer,
-)
-
+from .serializers import CreateOrgMembershipSerializer, RegisterSerializer
+from apps.authentication.presentation.apis import AuthAPI
 
 class RegisterView(views.APIView):
     permission_classes = [permissions.AllowAny]
@@ -30,90 +20,116 @@ class RegisterView(views.APIView):
             OpenApiExample(
                 'Payload de registro',
                 value={
-                    "full_name": "John Doe",
-                    "email": "john.doe@example.com",
-                    "password": "StrongPass123!",
+                    "user_name": "John Doe",
+                    "user_email": "john.doe@example.com",
+                    "password": "12345678"
                 },
                 request_only=True,
             ),
             OpenApiExample(
                 'Resposta de sucesso',
                 value={
-                    "email": "john.doe@example.com",
-                    "user_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3d6b56"
+                    "user": {
+                        "id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3d6b56",
+                        "email": "john.doe@example.com",
+                        "name": "John Doe"
+                    }
                 },
                 response_only=True,
             ),
         ],
-        tags=["Auth"],
+        tags=["register"],
     )
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        first_name = data.get('first_name') or ''
-        last_name = data.get('last_name') or ''
-        if data.get('full_name') and not (first_name or last_name):
-            parts = str(data['full_name']).strip().split()
-            if parts:
-                first_name = parts[0]
-                last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
 
-        obj = User.objects.create(
-            email=data['email'],
-            username=data.get('username'),
-            first_name=first_name,
-            last_name=last_name,
-        )
-        
-        obj.set_password(data['password'])
-        obj.save()
+        try:
+            user_resp = AuthAPI.register_create_user(
+                user_name=data["user_name"],
+                user_email=data["user_email"],
+                password=data["password"],
+            )
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"user": user_resp["user"]}, status=status.HTTP_201_CREATED)
 
-        return Response({"email": obj.email, "user_id": str(obj.user_id)}, status=status.HTTP_201_CREATED)
 
 
 class CreateOrganizationMembershipView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
     @extend_schema(
-        summary="Criar organização e vincular membership ao usuário",
+        summary="Criar organização e vincular membro ao usuário",
+        description=(
+            "Cria uma nova organização, cria uma associação (membership) para o usuário informado "
+            "com o papel especificado (por padrão 'manager'), e retorna os dados consolidados. "
+            "Campos obrigatórios: organization_name, user_id. Campo opcional: role (default: 'manager')."
+        ),
         request=CreateOrgMembershipSerializer,
-        responses={201: OpenApiResponse(description="Organização criada e usuário vinculado")},
+        responses={
+            201: OpenApiResponse(description="Organização criada e usuário vinculado", response=None),
+            400: OpenApiResponse(description="Erro de validação"),
+        },
+        examples=[
+            OpenApiExample(
+                'Payload mínimo',
+                value={
+                    "organization_name": "Minha Organização",
+                    "user_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3d6b56"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Payload com papel explícito',
+                value={
+                    "organization_name": "Acme Corp",
+                    "user_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3d6b56",
+                    "role": "manager"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Resposta de sucesso',
+                value={
+                    "organization": {
+                        "id": "1f3e7c90-1234-4fcd-9a88-abcdef123456",
+                        "name": "Acme Corp"
+                    },
+                    "membership": {
+                        "id": "7a2b1c34-5678-4abc-9def-1234567890ab",
+                        "user_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3d6b56",
+                        "organization_id": "1f3e7c90-1234-4fcd-9a88-abcdef123456",
+                        "role": "manager"
+                    },
+                    "user": {
+                        "id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3d6b56",
+                        "email": "john.doe@example.com",
+                        "name": "John Doe"
+                    }
+                },
+                response_only=True,
+            ),
+        ],
+        tags=["register"],
     )
-
     def post(self, request):
-        serializer = CreateOrgMembershipSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        org_repo = OrganizationRepositoryDjango()
-        user_repo = UserRepositoryDjango()
-
-        user = user_repo.get_user_by_id(int(data['user_id']))
-        if not user:
-            return Response({"detail": "Usuário não encontrado"}, status=status.HTTP_404_NOT_FOUND)
-        
-        org_obj = Organization.objects.create(
-            name=data['organization_name'],
-            email=data.get('organization_email'),
-            cpf_cnpj=data['cpf_cnpj'],
-        )
-
-        use_case = CreateUserWithOrganizationAndMembershipUseCase(user_repo, org_repo)
-        user_payload = {
-            'user_id': user.user_id,
+        payload = {
+            "organization_name": request.data.get("organization_name"),
+            "user_id": request.data.get("user_id"),
+            "role": request.data.get("role", "manager"),
         }
+        if not payload["organization_name"] or not payload["user_id"]:
+            return Response({"detail": "organization_name e user_id são obrigatórios"}, status=status.HTTP_400_BAD_REQUEST)
 
-        membership_payload = {'role': data.get('role', 'owner')}
-        user, organization, membership = use_case.execute(
-            user_payload,
-            organization_id=int(org_obj.organization_id),
-            membership_data=membership_payload,
+        org_resp = AuthAPI.register_create_org_membership_link_user(**payload)
+        return Response(
+            {
+                "organization": org_resp["organization"],
+                "membership": org_resp["membership"],
+                "user": org_resp["user"],
+            },
+            status=status.HTTP_201_CREATED,
         )
-
-        return Response({
-            "organization_id": getattr(organization, 'organization_id', None),
-            "user_id": user.user_id,
-            "role": membership.role,
-        }, status=status.HTTP_201_CREATED)

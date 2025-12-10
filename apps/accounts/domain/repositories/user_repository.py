@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from accounts.domain.entities.user import User
+from accounts.domain.entities.user import UserEntity as User
 
 
 class UserRepository(ABC):
@@ -24,7 +24,7 @@ class UserRepository(ABC):
         pass
     
     def save(self, user: User) -> User:
-        existing_user = self.get_user_by_id(user.user_id)
+        existing_user = self.get_user_by_id(user.id)
         if existing_user:
             return self.update_user(user)
         else:

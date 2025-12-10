@@ -1,16 +1,10 @@
-from dataclasses import dataclass, field
-from typing import Optional, List
-
-from accounts.infrastructure.models.organization import Organization
+from dataclasses import dataclass
+from uuid import UUID
 
 
 @dataclass
-class User:
+class UserEntity:
+    id: UUID
     email: str
-    username: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    is_active: bool = True
-    org_active: Optional[Organization] = None
-    org_list: List[Organization] = field(default_factory=list)
-    user_id: Optional[str] = None
+    org_active_id: UUID | None
+    org_list_ids: list[UUID]
